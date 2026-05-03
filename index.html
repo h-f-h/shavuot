@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>שבועות בצפת - התארגנות משפחתית</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Assistant', 'sans-serif'],
+                    },
+                    colors: {
+                        purple: {
+                            50: '#f5f3ff',
+                            100: '#ede9fe',
+                            200: '#ddd6fe',
+                            300: '#c4b5fd',
+                            400: '#a78bfa',
+                            500: '#8b5cf6',
+                            600: '#7c3aed',
+                            700: '#6d28d9',
+                            800: '#5b21b6',
+                            900: '#4c1d95',
+                        },
+                    },
+                },
+            },
+        }
+    </script>
+
+    <style>
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-in {
+            animation: fadeIn 0.5s ease-out forwards;
+        }
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        body {
+            background-color: #F8F7FF;
+            -webkit-tap-highlight-color: transparent;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <!-- Firebase & React via ESM -->
+    <script type="module">
+        import React, { useState, useEffect } from 'https://esm.sh/react@18.2.0';
+        import ReactDOM from 'https://esm.sh/react-dom@18.2.0/client';
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import { 
+            getFirestore, 
+            collection, 
+            doc, 
+            onSnapshot, 
+            addDoc, 
+            deleteDoc, 
+            updateDoc,
+            query,
+            orderBy
+        } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+        import { 
+            getAuth, 
+            signInAnonymously, 
+            onAuthStateChanged 
+        } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+        import * as Lucide from 'https://esm.sh/lucide-react@0.263.1';
+
+        // ==========================================
+        // PASTE YOUR FIREBASE CONFIG HERE
+        // ==========================================
+        const firebaseConfig = {
+          apiKey: "AIzaSyAkCWLpA79nxRPGLhI4dplAdcbr-WvY6w0",
+          authDomain: "shavuot-ef69f.firebaseapp.com",
+          projectId: "shavuot-ef69f",
+          storageBucket: "shavuot-ef69f.firebasestorage.app",
+          messagingSenderId: "773434763467",
+          appId: "1:773434763467:web:0594610387d6118cab534e",
+          measurementId: "G-LK9NV4ERS5"
+        };
+        // ==========================================
+
+        // Initialize Firebase
+        let app, auth, db;
+        try {
+            app = initializeApp(firebaseConfig);
+            auth = getAuth(app);
+            db = getFirestore(app);
+        } catch (e) {
+            console.error("Firebase Init Error: Make sure you pasted your config!", e);
+        }
+
+        const MEALS = [
+            { id: 'shavuot_eve', name: 'ערב שבועות', icon: '✨' },
+            { id: 'shavuot_day', name: 'יום שבועות', icon: '🥛' },
+            { id: 'shabbat_eve', name: 'ערב שבת', icon: '🕯️' },
+            { id: 'shabbat_day', name: 'שבת ביום', icon: '🍷' }
+        ];
+
+        function App() {
+            const [user, setUser] = useState(null);
+            const [activeTab, setActiveTab] = useState('meals');
+            const [selectedMeal, setSelectedMeal] = useState(MEALS[0].id);
+            
+            const [mealsData, setMealsData] = useState([]);
+            const [recipes, setRecipes] = useState([]);
+            const [shoppingList, setShoppingList] = useState([]);
+            const [tasks, setTasks] = useState([]);
+            const [bringList, setBringList] = useState([]);
+
+            const { 
+                Utensils, ShoppingCart, Users, Plus, Trash2, CheckCircle2, 
+                Clock, BookOpen, Sparkles, CalendarDays, PackageCheck 
+            } = Lucide;
+
+            useEffect(() => {
+                if (!auth) return;
+                const unsub = onAuthStateChanged(auth, (u) => {
+                    if (u) setUser(u);
+                    else signInAnonymously(auth).catch(console.error);
+                });
+                return unsub;
+            }, []);
+
+            useEffect(() => {
+                if (!user || !db) return;
+
+                const unsubscribes = [
+                    onSnapshot(collection(db, 'meals'), (s) => setMealsData(s.docs.map(d => ({ id: d.id, ...d.data() })))),
+                    onSnapshot(collection(db, 'recipes'), (s) => setRecipes(s.docs.map(d => ({ id: d.id, ...d.data() })))),
+                    onSnapshot(collection(db, 'shopping'), (s) => setShoppingList(s.docs.map(d => ({ id: d.id, ...d.data() })))),
+                    onSnapshot(collection(db, 'tasks'), (s) => setTasks(s.docs.map(d => ({ id: d.id, ...d.data() })))),
+                    onSnapshot(collection(db, 'bring'), (s) => setBringList(s.docs.map(d => ({ id: d.id, ...d.data() }))))
+                ];
+                return () => unsubscribes.forEach(unsub => unsub());
+            }, [user]);
+
+            const addItem = async (coll, data) => {
+                if (!user || !db) return alert("Firebase לא מחובר!");
+                await addDoc(collection(db, coll), data);
+            };
+
+            const deleteItem = async (coll, id) => {
+                if (!user || !db) return;
+                await deleteDoc(doc(db, coll, id));
+            };
+
+            const toggleItem = async (coll, id, status) => {
+                if (!user || !db) return;
+                await updateDoc(doc(db, coll, id), { completed: !status });
+            };
+
+            const TabButton = ({ id, label, icon: Icon }) => (
+                <button
+                    onClick={() => setActiveTab(id)}
+                    className={`flex flex-col items-center justify-center py-2 flex-1 transition-all duration-300 relative ${
+                        activeTab === id ? 'text-purple-700' : 'text-purple-300'
+                    }`}
+                >
+                    <Icon size={20} className={activeTab === id ? 'scale-110' : ''} />
+                    <span className="text-[10px] mt-1 font-bold whitespace-nowrap">{label}</span>
+                    {activeTab === id && (
+                        <div className="absolute top-0 w-6 h-1 bg-purple-600 rounded-full" />
+                    )}
+                </button>
+            );
+
+            if (!firebaseConfig.apiKey || firebaseConfig.apiKey === "YOUR_API_KEY") {
+                return (
+                    <div className="min-h-screen flex items-center justify-center p-6 text-center bg-purple-50">
+                        <div className="bg-white p-8 rounded-[2rem] shadow-xl border border-purple-100 max-w-sm">
+                            <Sparkles className="mx-auto text-purple-500 mb-4" size={48} />
+                            <h1 className="text-2xl font-black text-purple-900 mb-4">ברוכה הבאה!</h1>
+                            <p className="text-purple-600 mb-6 leading-relaxed">
+                                כדי שהאתר יעבוד וכולן יראו את השינויים, את צריכה להדביק את ה-Config של Firebase בתוך הקוד.
+                            </p>
+                            <div className="bg-purple-100 p-4 rounded-xl text-xs font-mono text-left mb-6 overflow-hidden">
+                                // PASTE YOUR FIREBASE CONFIG HERE
+                            </div>
+                            <p className="text-[10px] text-purple-400 font-bold uppercase tracking-wider">
+                                חג שבועות שמח! ✨
+                            </p>
+                        </div>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="min-h-screen bg-[#F8F7FF] text-right font-sans pb-28" dir="rtl">
+                    {/* Header */}
+                    <header className="bg-white/80 backdrop-blur-md shadow-sm sticky top-0 z-20 border-b border-purple-100 px-6 py-4">
+                        <div className="max-w-md mx-auto flex justify-between items-center">
+                            <div className="flex items-center gap-3">
+                                <div className="bg-gradient-to-br from-purple-500 to-indigo-600 p-2.5 rounded-2xl text-white shadow-lg shadow-purple-200">
+                                    <Sparkles size={20} />
+                                </div>
+                                <div>
+                                    <h1 className="text-xl font-black text-purple-900 tracking-tight">שבועות בצפת</h1>
+                                    <div className="flex items-center gap-1 text-[10px] text-purple-400 font-bold uppercase tracking-wider">
+                                        <CalendarDays size={10} />
+                                        <span>חג ושבת צמודים • תשפ"ו</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </header>
+
+                    <main className="max-w-md mx-auto p-5">
+                        
+                        {activeTab === 'meals' && (
+                            <div className="animate-in">
+                                <div className="flex gap-2 overflow-x-auto pb-4 no-scrollbar">
+                                    {MEALS.map(meal => (
+                                        <button
+                                            key={meal.id}
+                                            onClick={() => setSelectedMeal(meal.id)}
+                                            className={`px-5 py-2.5 rounded-2xl whitespace-nowrap text-sm font-bold transition-all duration-300 ${
+                                                selectedMeal === meal.id 
+                                                    ? 'bg-purple-600 text-white shadow-lg shadow-purple-200 scale-105' 
+                                                    : 'bg-white text-purple-400 border border-purple-50 hover:border-purple-200'
+                                            }`}
+                                        >
+                                            <span className="ml-1.5">{meal.icon}</span>
+                                            {meal.name}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                <div className="bg-white rounded-[2rem] shadow-xl shadow-purple-100/50 p-6 border border-purple-50">
+                                    <div className="flex items-center justify-between mb-6">
+                                        <h2 className="text-lg font-black text-purple-900">התפריט שלנו</h2>
+                                        <div className="h-1 w-12 bg-purple-100 rounded-full"></div>
+                                    </div>
+                                    
+                                    <div className="space-y-3">
+                                        {mealsData.filter(item => item.mealId === selectedMeal).map(item => (
+                                            <div key={item.id} className="group flex items-center justify-between p-4 bg-purple-50/50 hover:bg-purple-50 rounded-2xl border border-transparent hover:border-purple-100 transition-all">
+                                                <span className="font-bold text-purple-800">{item.dish}</span>
+                                                <button onClick={() => deleteItem('meals', item.id)} className="opacity-40 hover:opacity-100 text-purple-300 hover:text-red-400 transition-all">
+                                                    <Trash2 size={16} />
+                                                </button>
+                                            </div>
+                                        ))}
+                                        
+                                        <form className="mt-6 flex gap-2" onSubmit={(e) => {
+                                            e.preventDefault();
+                                            const dish = e.target.dish.value;
+                                            if (dish) {
+                                                addItem('meals', { mealId: selectedMeal, dish });
+                                                e.target.reset();
+                                            }
+                                        }}>
+                                            <input 
+                                                name="dish" 
+                                                placeholder="מה נבשל לסעודה הזו?" 
+                                                className="flex-1 bg-gray-50 border-none rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-purple-400 transition-all"
+                                            />
+                                            <button type="submit" className="bg-purple-600 text-white p-3 rounded-xl shadow-md hover:bg-purple-700 transition-colors">
+                                                <Plus size={20} strokeWidth={3} />
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {activeTab === 'shopping' && (
+                            <div className="space-y-4 animate-in">
+                                <h2 className="text-2xl font-black text-purple-900 px-1">רשימת קניות</h2>
+                                <div className="bg-white rounded-[2rem] shadow-xl shadow-purple-100/50 border border-purple-50 overflow-hidden">
+                                    {shoppingList.length === 0 ? (
+                                        <div className="p-12 text-center">
+                                            <p className="text-purple-300 font-bold italic">הרשימה ריקה</p>
+                                        </div>
+                                    ) : (
+                                        <div className="divide-y divide-purple-50">
+                                            {shoppingList.map(item => (
+                                                <div key={item.id} className="flex items-center justify-between p-5 hover:bg-purple-50/30 transition-colors">
+                                                    <div className="flex items-center gap-4 cursor-pointer flex-1" onClick={() => toggleItem('shopping', item.id, item.completed)}>
+                                                        <div className={`w-7 h-7 rounded-full border-2 flex items-center justify-center transition-all ${
+                                                            item.completed ? 'bg-purple-600 border-purple-600 text-white' : 'border-purple-100 bg-white text-transparent'
+                                                        }`}>
+                                                            <CheckCircle2 size={16} strokeWidth={3} />
+                                                        </div>
+                                                        <span className={`font-bold transition-all ${item.completed ? 'line-through text-purple-200' : 'text-purple-800'}`}>
+                                                            {item.text}
+                                                        </span>
+                                                    </div>
+                                                    <button onClick={() => deleteItem('shopping', item.id)} className="text-purple-100 hover:text-red-400 px-2 transition-colors">
+                                                        <Trash2 size={18} />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                                <form className="flex gap-2" onSubmit={(e) => {
+                                    e.preventDefault();
+                                    const val = e.target.item.value;
+                                    if (val) {
+                                        addItem('shopping', { text: val, completed: false });
+                                        e.target.reset();
+                                    }
+                                }}>
+                                    <input name="item" placeholder="להוסיף מוצר..." className="flex-1 bg-white shadow-sm border border-purple-100 rounded-2xl px-5 py-4 text-sm focus:ring-2 focus:ring-purple-400 outline-none" />
+                                    <button type="submit" className="bg-purple-600 text-white px-5 rounded-2xl">
+                                        <Plus size={24} strokeWidth={3} />
+                                    </button>
+                                </form>
+                            </div>
+                        )}
+
+                        {activeTab === 'bring' && (
+                            <div className="space-y-4 animate-in">
+                                <h2 className="text-2xl font-black text-purple-900 px-1">מה מביאים?</h2>
+                                <p className="text-xs text-purple-400 px-1 -mt-2">דברים שמישהו מביא מבחוץ (ציוד, שתייה, פיצוחים...)</p>
+                                
+                                <div className="bg-white rounded-[2rem] shadow-xl shadow-purple-100/50 border border-purple-50 overflow-hidden">
+                                    {bringList.length === 0 ? (
+                                        <div className="p-12 text-center text-purple-200">
+                                            <PackageCheck size={48} className="mx-auto mb-2 opacity-20" />
+                                            <p className="font-bold">טרם נוספו פריטים</p>
+                                        </div>
+                                    ) : (
+                                        <div className="divide-y divide-purple-50">
+                                            {bringList.map(item => (
+                                                <div key={item.id} className="flex items-center justify-between p-5">
+                                                    <div className="flex-1">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="font-black text-purple-900">{item.text}</span>
+                                                            {item.completed && <CheckCircle2 size={16} className="text-green-500" />}
+                                                        </div>
+                                                        <div className="text-sm font-bold text-purple-400 flex items-center gap-1 mt-1">
+                                                            <Users size={12} /> {item.who || 'טרם נקבע'}
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        <button 
+                                                            onClick={() => toggleItem('bring', item.id, item.completed)}
+                                                            className={`p-2 rounded-xl text-xs font-bold transition-colors ${item.completed ? 'bg-green-50 text-green-600' : 'bg-purple-50 text-purple-400'}`}
+                                                        >
+                                                            {item.completed ? 'הגיע' : 'בטיפול'}
+                                                        </button>
+                                                        <button onClick={() => deleteItem('bring', item.id)} className="text-purple-100 hover:text-red-400 p-2">
+                                                            <Trash2 size={18} />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="bg-purple-50 p-6 rounded-[2rem] border border-purple-100">
+                                    <h3 className="font-black text-purple-800 mb-3 text-sm">הוספת פריט להבאה</h3>
+                                    <form className="space-y-2" onSubmit={(e) => {
+                                        e.preventDefault();
+                                        const text = e.target.text.value;
+                                        const who = e.target.who.value;
+                                        if (text) {
+                                            addItem('bring', { text, who, completed: false });
+                                            e.target.reset();
+                                        }
+                                    }}>
+                                        <input name="text" placeholder="מה להביא? (למשל: יין, מצעים, כסאות)" className="w-full bg-white border border-purple-100 rounded-xl px-4 py-3 text-sm outline-none" />
+                                        <div className="flex gap-2">
+                                            <input name="who" placeholder="מי מביא?" className="flex-1 bg-white border border-purple-100 rounded-xl px-4 py-3 text-sm outline-none" />
+                                            <button type="submit" className="bg-purple-600 text-white px-6 rounded-xl font-bold">הוספה</button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        )}
+
+                        {activeTab === 'recipes' && (
+                            <div className="space-y-6 animate-in">
+                                <h2 className="text-2xl font-black text-purple-900 px-1">ספר המתכונים</h2>
+                                {recipes.map(recipe => (
+                                    <div key={recipe.id} className="bg-white rounded-[2rem] p-6 shadow-xl shadow-purple-100/50 border border-purple-50 relative group">
+                                        <button onClick={() => deleteItem('recipes', recipe.id)} className="absolute top-6 left-6 opacity-40 hover:opacity-100 text-purple-200 hover:text-red-400 transition-all">
+                                            <Trash2 size={18} />
+                                        </button>
+                                        <h3 className="font-black text-xl text-purple-800 mb-4 ml-8">{recipe.title}</h3>
+                                        <div className="bg-purple-50/50 rounded-2xl p-4 text-sm text-purple-900 leading-relaxed whitespace-pre-line border border-purple-100/50">
+                                            {recipe.ingredients}
+                                        </div>
+                                    </div>
+                                ))}
+                                <div className="bg-gradient-to-br from-purple-700 to-indigo-800 p-8 rounded-[2.5rem] text-white">
+                                    <h3 className="font-black text-lg mb-4">מתכון חדש</h3>
+                                    <form className="space-y-4" onSubmit={(e) => {
+                                        e.preventDefault();
+                                        const title = e.target.title.value;
+                                        const ing = e.target.ingredients.value;
+                                        if (title) {
+                                            addItem('recipes', { title, ingredients: ing });
+                                            e.target.reset();
+                                        }
+                                    }}>
+                                        <input name="title" placeholder="שם המתכון" className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-sm text-white placeholder-white/50 outline-none" />
+                                        <textarea name="ingredients" placeholder="מצרכים והוראות..." className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-sm text-white h-28 placeholder-white/50 outline-none" />
+                                        <button type="submit" className="w-full bg-white text-purple-700 py-3 rounded-xl font-black shadow-lg">שמירה</button>
+                                    </form>
+                                </div>
+                            </div>
+                        )}
+
+                        {activeTab === 'tasks' && (
+                            <div className="space-y-6 animate-in">
+                                <h2 className="text-2xl font-black text-purple-900 px-1">חלוקת עבודה</h2>
+                                <div className="space-y-4">
+                                    {tasks.map(task => (
+                                        <div key={task.id} className="bg-white p-5 rounded-3xl shadow-lg border-r-[6px] border-purple-500 flex justify-between items-center group">
+                                            <div>
+                                                <h4 className="font-black text-purple-900 text-lg">{task.what}</h4>
+                                                <div className="flex items-center gap-4 mt-2">
+                                                    <div className="flex items-center gap-1.5 text-xs font-bold text-purple-400 bg-purple-50 px-2 py-1 rounded-full">
+                                                        <Users size={12} /> {task.who}
+                                                    </div>
+                                                    <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-400 bg-indigo-50 px-2 py-1 rounded-full">
+                                                        <Clock size={12} /> {task.when}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <button onClick={() => deleteItem('tasks', task.id)} className="opacity-40 hover:opacity-100 text-purple-100 hover:text-red-400 p-2">
+                                                <Trash2 size={18} />
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="bg-white border-2 border-dashed border-purple-200 p-6 rounded-[2rem]">
+                                    <h3 className="font-black text-purple-800 mb-4">הקצאת משימה</h3>
+                                    <form className="space-y-3" onSubmit={(e) => {
+                                        e.preventDefault();
+                                        const { what, who, when } = e.target;
+                                        if (what.value && who.value) {
+                                            addItem('tasks', { what: what.value, who: who.value, when: when.value });
+                                            e.target.reset();
+                                        }
+                                    }}>
+                                        <input name="what" placeholder="מה המשימה?" className="w-full bg-gray-50 border-none rounded-xl px-4 py-3 text-sm outline-none focus:ring-1 focus:ring-purple-200" />
+                                        <div className="flex gap-2">
+                                            <input name="who" placeholder="מי האחראי?" className="flex-1 bg-gray-50 border-none rounded-xl px-4 py-3 text-sm outline-none focus:ring-1 focus:ring-purple-200" />
+                                            <input name="when" placeholder="מתי?" className="flex-1 bg-gray-50 border-none rounded-xl px-4 py-3 text-sm outline-none focus:ring-1 focus:ring-purple-200" />
+                                        </div>
+                                        <button type="submit" className="w-full bg-purple-100 text-purple-700 py-3 rounded-xl font-black hover:bg-purple-200 transition-colors">הוספה</button>
+                                    </form>
+                                </div>
+                            </div>
+                        )}
+                    </main>
+
+                    {/* Navigation */}
+                    <nav className="fixed bottom-6 left-4 right-4 h-20 bg-white/90 backdrop-blur-xl shadow-2xl shadow-purple-200 rounded-[2.5rem] border border-white/50 flex justify-around items-center px-2 z-30">
+                        <TabButton id="meals" label="תפריט" icon={Utensils} />
+                        <TabButton id="bring" label="מביאים" icon={PackageCheck} />
+                        <TabButton id="recipes" label="מתכונים" icon={BookOpen} />
+                        <TabButton id="shopping" label="קניות" icon={ShoppingCart} />
+                        <TabButton id="tasks" label="עבודה" icon={Users} />
+                    </nav>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(React.createElement(App));
+    </script>
+</body>
+</html>
