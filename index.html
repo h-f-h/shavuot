@@ -138,6 +138,7 @@
             const [user, setUser] = useState(null);
             const [activeTab, setActiveTab] = useState('meals');
             const [selectedMeal, setSelectedMeal] = useState(MEALS[0].id);
+            const [cookFilter, setCookFilter] = useState(null);
             
             const [mealsData, setMealsData] = useState([]);
             const [recipes, setRecipes] = useState([]);
@@ -245,6 +246,26 @@
                                     ))}
                                 </div>
 
+                                {/* Filter by Cook */}
+                                <div className="flex items-center gap-2 overflow-x-auto no-scrollbar px-1">
+                                    <span className="text-[10px] font-black text-purple-400 whitespace-nowrap">סננון לפי מבשלת:</span>
+                                    <button 
+                                        onClick={() => setCookFilter(null)}
+                                        className={`px-3 py-1 rounded-full text-[10px] font-bold transition-all ${!cookFilter ? 'bg-purple-600 text-white' : 'bg-purple-100 text-purple-600'}`}
+                                    >
+                                        הכל
+                                    </button>
+                                    {[...new Set(mealsData.map(m => m.who).filter(Boolean))].map(cook => (
+                                        <button 
+                                            key={cook}
+                                            onClick={() => setCookFilter(cook)}
+                                            className={`px-3 py-1 rounded-full text-[10px] font-bold transition-all ${cookFilter === cook ? 'bg-purple-600 text-white' : 'bg-purple-100 text-purple-600'}`}
+                                        >
+                                            {cook}
+                                        </button>
+                                    ))}
+                                </div>
+
                                 <div className="glass-card rounded-[2.5rem] p-8 border border-white">
                                     <div className="flex items-center justify-between mb-8">
                                         <div>
@@ -255,11 +276,21 @@
                                     </div>
                                     
                                     <div className="space-y-3">
-                                        {mealsData.filter(item => item.mealId === selectedMeal).map(item => (
+                                        {mealsData
+                                            .filter(item => item.mealId === selectedMeal)
+                                            .filter(item => !cookFilter || item.who === cookFilter)
+                                            .map(item => (
                                             <div key={item.id} className="group flex items-center justify-between p-4 bg-white/50 hover:bg-white rounded-2xl border border-purple-50 hover:border-purple-200 transition-all shadow-sm">
-                                                <div className="flex items-center gap-3">
-                                                    <div className="w-2 h-2 rounded-full bg-purple-400"></div>
-                                                    <span className="font-bold text-purple-900">{item.dish}</span>
+                                                <div className="flex flex-col">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-2 h-2 rounded-full bg-purple-400"></div>
+                                                        <span className="font-bold text-purple-900">{item.dish}</span>
+                                                    </div>
+                                                    {item.who && (
+                                                        <div className="text-[10px] font-bold text-purple-400 flex items-center gap-1 mt-1 mr-5">
+                                                            <ChefHat size={10} /> {item.who}
+                                                        </div>
+                                                    )}
                                                 </div>
                                                 <button onClick={() => deleteItem('meals', item.id)} className="opacity-0 group-hover:opacity-100 text-purple-200 hover:text-red-400 transition-all p-1">
                                                     <Trash2 size={18} />
@@ -267,22 +298,30 @@
                                             </div>
                                         ))}
                                         
-                                        <form className="mt-8 flex gap-3" onSubmit={(e) => {
+                                        <form className="mt-8 space-y-3" onSubmit={(e) => {
                                             e.preventDefault();
                                             const dish = e.target.dish.value;
+                                            const who = e.target.who.value;
                                             if (dish) {
-                                                addItem('meals', { mealId: selectedMeal, dish });
+                                                addItem('meals', { mealId: selectedMeal, dish, who });
                                                 e.target.reset();
                                             }
                                         }}>
                                             <input 
                                                 name="dish" 
                                                 placeholder="מה נבשל לסעודה הזו?" 
-                                                className="flex-1 bg-white/50 border-2 border-purple-50 rounded-2xl px-5 py-4 text-sm focus:ring-4 focus:ring-purple-100 focus:border-purple-200 transition-all outline-none"
+                                                className="w-full bg-white/50 border-2 border-purple-50 rounded-2xl px-5 py-4 text-sm focus:ring-4 focus:ring-purple-100 focus:border-purple-200 transition-all outline-none"
                                             />
-                                            <button type="submit" className="purple-gradient text-white p-4 rounded-2xl shadow-lg hover:scale-105 transition-all active:scale-95">
-                                                <Plus size={24} strokeWidth={3} />
-                                            </button>
+                                            <div className="flex gap-3">
+                                                <input 
+                                                    name="who" 
+                                                    placeholder="מי המבשלת?" 
+                                                    className="flex-1 bg-white/50 border-2 border-purple-50 rounded-2xl px-5 py-4 text-sm focus:ring-4 focus:ring-purple-100 focus:border-purple-200 transition-all outline-none"
+                                                />
+                                                <button type="submit" className="purple-gradient text-white p-4 rounded-2xl shadow-lg hover:scale-105 transition-all active:scale-95">
+                                                    <Plus size={24} strokeWidth={3} />
+                                                </button>
+                                            </div>
                                         </form>
                                     </div>
                                 </div>
